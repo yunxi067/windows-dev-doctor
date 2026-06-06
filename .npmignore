@@ -1,0 +1,8 @@
+plans/
+test/
+.github/
+.env
+coverage/
+npm-debug.log*
+*.tgz
+
