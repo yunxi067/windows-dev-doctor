@@ -1,11 +1,14 @@
 {
-  "name": "windows-dev-doctor",
+  "name": "@yunxi067/windows-dev-doctor",
   "version": "0.1.0",
   "description": "Windows 开发环境巡检 CLI，检查 Git、Node、Python、Java、Docker、环境变量和端口占用。",
   "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/yunxi067/windows-dev-doctor.git"
+    "url": "git+https://github.com/yunxi067/windows-dev-doctor.git"
   },
   "homepage": "https://github.com/yunxi067/windows-dev-doctor#readme",
   "bugs": {
@@ -15,12 +18,15 @@
     "src",
     "docs",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    "SECURITY.md",
+    "CODE_OF_CONDUCT.md"
   ],
   "bin": {
-    "windows-dev-doctor": "./src/cli.js",
-    "wdd": "./src/cli.js"
+    "windows-dev-doctor": "src/cli.js",
+    "wdd": "src/cli.js"
   },
   "scripts": {
     "test": "node --test",
