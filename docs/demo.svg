@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="600" viewBox="0 0 1040 600" role="img" aria-labelledby="title desc">
+  <title id="title">Windows Dev Doctor terminal demo</title>
+  <desc id="desc">A terminal-style preview of Windows Dev Doctor checking tools, environment variables, and ports.</desc>
+  <rect width="1040" height="600" fill="#0f172a"/>
+  <rect x="36" y="32" width="972" height="536" rx="8" fill="#111827"/>
+  <circle cx="68" cy="60" r="7" fill="#ef4444"/>
+  <circle cx="92" cy="60" r="7" fill="#f59e0b"/>
+  <circle cx="116" cy="60" r="7" fill="#22c55e"/>
+  <text x="64" y="112" fill="#e5e7eb" font-family="Consolas, Monaco, monospace" font-size="24">$ windows-dev-doctor</text>
+  <text x="64" y="166" fill="#93c5fd" font-family="Consolas, Monaco, monospace" font-size="22">Windows Dev Doctor 巡检报告</text>
+  <text x="64" y="208" fill="#fde68a" font-family="Consolas, Monaco, monospace" font-size="22">总分：82/100 - 整体良好</text>
+  <text x="64" y="266" fill="#bbf7d0" font-family="Consolas, Monaco, monospace" font-size="21">[通过] Git -> 2.48.1.windows.1</text>
+  <text x="64" y="306" fill="#bbf7d0" font-family="Consolas, Monaco, monospace" font-size="21">[通过] Node.js -> 24.14.0</text>
+  <text x="64" y="346" fill="#fecaca" font-family="Consolas, Monaco, monospace" font-size="21">[失败] Python -> 未检测到 python --version</text>
+  <text x="96" y="386" fill="#cbd5e1" font-family="Consolas, Monaco, monospace" font-size="19">建议：安装 Python 3，并勾选 Add python.exe to PATH。</text>
+  <text x="64" y="446" fill="#fde68a" font-family="Consolas, Monaco, monospace" font-size="21">[注意] 端口 3000 正被 PID 1234 (node.exe) 占用</text>
+  <text x="96" y="486" fill="#cbd5e1" font-family="Consolas, Monaco, monospace" font-size="19">建议：确认进程用途后运行 taskkill /PID 1234 /F。</text>
+</svg>
+
