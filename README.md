@@ -1,5 +1,9 @@
 # Windows Dev Doctor
 
+[![test](https://github.com/yunxi067/windows-dev-doctor/actions/workflows/test.yml/badge.svg)](https://github.com/yunxi067/windows-dev-doctor/actions/workflows/test.yml)
+[![npm](https://img.shields.io/npm/v/@yunxi067/windows-dev-doctor.svg)](https://www.npmjs.com/package/@yunxi067/windows-dev-doctor)
+[![license](https://img.shields.io/github/license/yunxi067/windows-dev-doctor.svg)](./LICENSE)
+
 Windows Dev Doctor 是一个中文命令行巡检工具，用来快速检查 Windows 开发环境是否健康。它会检查 Git、Node.js、npm、Python、Java、Docker、环境变量和常见开发端口，并给出清晰的中文修复建议。
 
 ![Windows Dev Doctor 演示](./docs/demo.svg)
@@ -14,6 +18,12 @@ Windows Dev Doctor 是一个中文命令行巡检工具，用来快速检查 Win
 - 零运行时依赖：只使用 Node.js 标准库。
 
 ## 安装
+
+使用 npx 直接运行：
+
+```bash
+npx @yunxi067/windows-dev-doctor
+```
 
 从仓库运行：
 
@@ -34,19 +44,19 @@ node src/cli.js
 输出中文文本报告：
 
 ```bash
-npm start
+npx @yunxi067/windows-dev-doctor
 ```
 
 输出 JSON：
 
 ```bash
-node src/cli.js --json
+npx @yunxi067/windows-dev-doctor --json
 ```
 
 指定要检查的端口：
 
 ```bash
-node src/cli.js --ports=3000,5173,8080,3306
+npx @yunxi067/windows-dev-doctor --ports=3000,5173,8080,3306
 ```
 
 查看帮助：
@@ -161,6 +171,10 @@ node src/cli.js --json
 ## 参与贡献
 
 欢迎提交 issue 或 pull request。请查看 [CONTRIBUTING.md](./CONTRIBUTING.md)。
+
+## 版本记录
+
+查看 [CHANGELOG.md](./CHANGELOG.md)。
 
 ## License
 
