@@ -6,7 +6,12 @@ import {
   buildCommandInvocation,
   buildReport,
   createToolCheck,
+  createCommandCheck,
+  createFixPlan,
+  maskPrivateText,
+  parsePipConfig,
   parseNetstat,
+  parsePowerShellExecutionPolicy,
   resolveWindowsCommand,
   scoreReport,
   summarizeToolOutput,
@@ -32,6 +37,18 @@ test('createToolCheck marks missing tools with Chinese repair suggestions', () =
   assert.match(check.suggestion, /安装 Git/);
 });
 
+test('createToolCheck includes repair suggestions for optional v0.2 tools', () => {
+  const check = createToolCheck({
+    id: 'pnpm',
+    label: 'pnpm',
+    command: 'pnpm --version',
+    result: { ok: false, error: 'not found' }
+  });
+
+  assert.equal(check.status, 'warn');
+  assert.match(check.suggestion, /corepack/);
+});
+
 test('resolveWindowsCommand uses Windows executable shims for cmd and exe tools', () => {
   assert.equal(resolveWindowsCommand('npm', 'win32'), 'npm.cmd');
   assert.equal(resolveWindowsCommand('py', 'win32'), 'py.exe');
@@ -43,6 +60,10 @@ test('buildCommandInvocation wraps Windows cmd shims through cmd.exe', () => {
   assert.deepEqual(buildCommandInvocation('npm.cmd', ['--version'], 'win32'), {
     file: 'cmd.exe',
     args: ['/d', '/c', 'npm.cmd --version']
+  });
+  assert.deepEqual(buildCommandInvocation('gradle.bat', ['--version'], 'win32'), {
+    file: 'cmd.exe',
+    args: ['/d', '/c', 'gradle.bat --version']
   });
   assert.deepEqual(buildCommandInvocation('git', ['--version'], 'win32'), {
     file: 'git',
@@ -92,6 +113,39 @@ java.exe                     5678 Console                    1    120,000 K
   ]);
 });
 
+test('parsePowerShellExecutionPolicy warns on restricted policy', () => {
+  const check = parsePowerShellExecutionPolicy('Restricted\r\n');
+
+  assert.equal(check.id, 'powershell-execution-policy');
+  assert.equal(check.status, 'warn');
+  assert.match(check.suggestion, /RemoteSigned/);
+});
+
+test('parsePipConfig summarizes configured package index', () => {
+  const check = parsePipConfig('global.index-url=https://pypi.tuna.tsinghua.edu.cn/simple\n');
+
+  assert.equal(check.id, 'pip-index-url');
+  assert.equal(check.status, 'pass');
+  assert.match(check.detail, /tuna/);
+});
+
+test('createCommandCheck converts command output into a report item', () => {
+  const check = createCommandCheck({
+    id: 'npm-registry',
+    title: 'npm registry',
+    command: 'npm config get registry',
+    result: { ok: true, stdout: 'https://registry.npmmirror.com/\n' },
+    analyze: (value) => ({
+      status: value.includes('npmmirror') ? 'pass' : 'warn',
+      detail: `registry=${value}`,
+      suggestion: ''
+    })
+  });
+
+  assert.equal(check.status, 'pass');
+  assert.match(check.detail, /npmmirror/);
+});
+
 test('buildReport and scoreReport produce an overall health summary', () => {
   const report = buildReport({
     platform: 'win32',
@@ -139,4 +193,36 @@ test('toTextReport renders Chinese sections and concrete repair commands', () =>
   assert.match(text, /Windows Dev Doctor 巡检报告/);
   assert.match(text, /工具链/);
   assert.match(text, /安装 Git for Windows/);
+});
+
+test('maskPrivateText hides usernames and home directories', () => {
+  const text = 'TEMP=C:\\Users\\alice\\AppData\\Local\\Temp; PATH=C:\\Users\\alice\\bin; HOME=/Users/alice/project';
+  const masked = maskPrivateText(text, {
+    USERNAME: 'alice',
+    USERPROFILE: 'C:\\Users\\alice'
+  });
+
+  assert.equal(masked.includes('alice'), false);
+  assert.match(masked, /<USER>/);
+  assert.match(masked, /<USERPROFILE>/);
+});
+
+test('createFixPlan lists only actionable failed or warning suggestions', () => {
+  const plan = createFixPlan({
+    sections: [
+      {
+        title: '工具链',
+        items: [
+          { id: 'git', title: 'Git', status: 'pass', suggestion: '' },
+          { id: 'python', title: 'Python', status: 'fail', suggestion: '安装 Python 3。' },
+          { id: 'dockerDaemon', title: 'Docker Engine', status: 'warn', suggestion: '启动 Docker Desktop。' }
+        ]
+      }
+    ]
+  });
+
+  assert.match(plan, /修复计划/);
+  assert.match(plan, /Python：安装 Python 3。/);
+  assert.match(plan, /Docker Engine：启动 Docker Desktop。/);
+  assert.doesNotMatch(plan, /Git/);
 });

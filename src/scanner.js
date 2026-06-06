@@ -6,9 +6,13 @@ import {
   analyzeEnvironment,
   buildCommandInvocation,
   buildReport,
+  createCommandCheck,
   createToolCheck,
   DEFAULT_PORTS,
+  parseNpmRegistry,
   parseNetstat,
+  parsePipConfig,
+  parsePowerShellExecutionPolicy,
   resolveWindowsCommand
 } from './core.js';
 
@@ -22,19 +26,26 @@ const TOOL_COMMANDS = [
   { id: 'py', label: 'Python Launcher', command: 'py --version', file: 'py', args: ['--version'] },
   { id: 'java', label: 'Java', command: 'java -version', file: 'java', args: ['-version'] },
   { id: 'docker', label: 'Docker CLI', command: 'docker --version', file: 'docker', args: ['--version'] },
-  { id: 'dockerDaemon', label: 'Docker Engine', command: 'docker info', file: 'docker', args: ['info'] }
+  { id: 'dockerDaemon', label: 'Docker Engine', command: 'docker info', file: 'docker', args: ['info'] },
+  { id: 'wsl', label: 'WSL', command: 'wsl --status', file: 'wsl', args: ['--status'] },
+  { id: 'pnpm', label: 'pnpm', command: 'pnpm --version', file: 'pnpm', args: ['--version'] },
+  { id: 'yarn', label: 'Yarn', command: 'yarn --version', file: 'yarn', args: ['--version'] },
+  { id: 'maven', label: 'Maven', command: 'mvn --version', file: 'mvn', args: ['--version'] },
+  { id: 'gradle', label: 'Gradle', command: 'gradle --version', file: 'gradle', args: ['--version'] }
 ];
 
 export async function scanSystem(options = {}) {
   const ports = options.ports ?? DEFAULT_PORTS;
   const toolChecks = await scanTools(options);
   const environmentChecks = analyzeEnvironment(process.env, { existsSync: fs.existsSync });
+  const configChecks = await scanConfig(options);
   const portChecks = await scanPorts(ports, options);
 
   return buildReport({
     platform: process.platform,
     toolChecks,
     environmentChecks,
+    configChecks,
     portChecks
   });
 }
@@ -47,6 +58,59 @@ async function scanTools(options) {
     const result = await runCommand(command.file, command.args, { timeoutMs: options.timeoutMs ?? 5000 });
     checks.push(createToolCheck({ ...tool, result }));
   }
+  return checks;
+}
+
+async function scanConfig(options) {
+  const timeoutMs = options.timeoutMs ?? 5000;
+  const checks = [];
+
+  if (process.platform === 'win32' || options.forceWindowsCommands) {
+    const policy = await runCommand('powershell.exe', [
+      '-NoProfile',
+      '-Command',
+      'Get-ExecutionPolicy -Scope CurrentUser'
+    ], { timeoutMs });
+    checks.push(createCommandCheck({
+      id: 'powershell-execution-policy',
+      title: 'PowerShell 执行策略',
+      command: 'powershell.exe Get-ExecutionPolicy',
+      result: policy,
+      analyze: parsePowerShellExecutionPolicy
+    }));
+  } else {
+    checks.push({
+      id: 'powershell-execution-policy',
+      title: 'PowerShell 执行策略',
+      status: 'warn',
+      detail: '当前平台不是 Windows，跳过 PowerShell 执行策略检查。',
+      suggestion: '在 Windows 终端中运行可获得准确结果。'
+    });
+  }
+
+  const npmCommand = buildCommandInvocation(resolveWindowsCommand('npm'), ['config', 'get', 'registry']);
+  const npmRegistry = await runCommand(npmCommand.file, npmCommand.args, { timeoutMs });
+  checks.push(createCommandCheck({
+    id: 'npm-registry',
+    title: 'npm 镜像源',
+    command: 'npm config get registry',
+    result: npmRegistry,
+    analyze: parseNpmRegistry
+  }));
+
+  const pipConfig = await runCommand(resolveWindowsCommand('pip'), ['config', 'list'], { timeoutMs });
+  if (pipConfig.ok) {
+    checks.push(parsePipConfig(pipConfig.stdout));
+  } else {
+    checks.push({
+      id: 'pip-index-url',
+      title: 'pip 镜像源',
+      status: 'warn',
+      detail: `无法运行 pip config list：${pipConfig.error}`,
+      suggestion: '如果你使用 Python 开发，请确认 pip 可用；不使用 Python 可忽略。'
+    });
+  }
+
   return checks;
 }
 

@@ -8,8 +8,15 @@ const TOOL_REPAIR = {
   py: '安装 Python Launcher 或确保 Python 安装器勾选了 launcher 选项。',
   java: '安装 JDK 17 或 21，例如 Eclipse Temurin，并配置 JAVA_HOME 与 PATH。',
   docker: '安装 Docker Desktop for Windows，并确认 WSL2/虚拟化已启用。',
-  dockerDaemon: '启动 Docker Desktop，等待引擎就绪后再运行 docker info。'
+  dockerDaemon: '启动 Docker Desktop，等待引擎就绪后再运行 docker info。',
+  wsl: '如需 Linux 开发环境，可安装或启用 WSL2：在管理员 PowerShell 中运行 wsl --install。',
+  pnpm: '如需 pnpm，可先运行 corepack enable，再运行 corepack prepare pnpm@latest --activate。',
+  yarn: '如需 Yarn，可先运行 corepack enable，再运行 corepack prepare yarn@stable --activate。',
+  maven: '如需 Java 后端构建工具，可安装 Maven 并将 mvn 所在目录加入 PATH。',
+  gradle: '如需 Gradle 构建工具，可安装 Gradle 或使用项目自带的 gradlew。'
 };
+
+const OPTIONAL_TOOL_IDS = new Set(['dockerDaemon', 'wsl', 'pnpm', 'yarn', 'maven', 'gradle']);
 
 export function summarizeToolOutput(id, result = {}) {
   const text = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
@@ -35,9 +42,66 @@ export function createToolCheck({ id, label, command, result }) {
   return {
     id,
     title: label,
-    status: id === 'dockerDaemon' ? 'warn' : 'fail',
+    status: OPTIONAL_TOOL_IDS.has(id) ? 'warn' : 'fail',
     detail: unavailable,
     suggestion: TOOL_REPAIR[id] ?? '确认工具已安装，并且可执行文件所在目录已加入 PATH。'
+  };
+}
+
+export function createCommandCheck({ id, title, command, result, analyze }) {
+  if (!result?.ok) {
+    return {
+      id,
+      title,
+      status: 'warn',
+      detail: `无法运行 ${command}：${result?.error ?? '命令执行失败'}`,
+      suggestion: '如果你依赖这个配置，请确认对应命令可用后重新运行巡检。'
+    };
+  }
+
+  return {
+    id,
+    title,
+    ...analyze(String(result.stdout ?? '').trim())
+  };
+}
+
+export function parsePowerShellExecutionPolicy(output = '') {
+  const policy = firstMeaningfulLine(output) || 'Undefined';
+  const restrictive = new Set(['Restricted', 'AllSigned', 'Undefined']);
+  const status = restrictive.has(policy) ? 'warn' : 'pass';
+
+  return {
+    id: 'powershell-execution-policy',
+    title: 'PowerShell 执行策略',
+    status,
+    detail: `ExecutionPolicy=${policy}`,
+    suggestion: status === 'warn'
+      ? '如果 npm/pnpm 脚本无法运行，可在当前用户范围执行 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser。'
+      : ''
+  };
+}
+
+export function parseNpmRegistry(output = '') {
+  const registry = firstMeaningfulLine(output);
+  const isOfficial = registry === 'https://registry.npmjs.org/';
+
+  return {
+    status: registry ? 'pass' : 'warn',
+    detail: registry ? `registry=${registry}` : '未读取到 npm registry。',
+    suggestion: registry && !isOfficial ? '当前 npm registry 不是官方源；如果安装异常，请确认镜像源可用。' : ''
+  };
+}
+
+export function parsePipConfig(output = '') {
+  const indexUrl = findConfigValue(output, ['global.index-url', 'index-url']);
+
+  return {
+    id: 'pip-index-url',
+    title: 'pip 镜像源',
+    status: indexUrl ? 'pass' : 'warn',
+    detail: indexUrl ? `index-url=${indexUrl}` : '未检测到 pip index-url 配置。',
+    suggestion: indexUrl ? '' : '如果 pip 安装很慢，可以配置可信的国内镜像源；不需要镜像时可忽略。'
   };
 }
 
@@ -143,12 +207,14 @@ export function parseNetstat(netstatOutput = '', tasklistOutput = '', targetPort
 export function resolveWindowsCommand(command, platform = process.platform) {
   if (platform !== 'win32') return command;
   if (command === 'npm' || command === 'npx' || command === 'pnpm' || command === 'yarn') return `${command}.cmd`;
+  if (command === 'mvn') return 'mvn.cmd';
+  if (command === 'gradle') return 'gradle.bat';
   if (command === 'py') return 'py.exe';
   return command;
 }
 
 export function buildCommandInvocation(file, args = [], platform = process.platform) {
-  if (platform === 'win32' && /\.cmd$/i.test(file)) {
+  if (platform === 'win32' && /\.(?:cmd|bat)$/i.test(file)) {
     return {
       file: 'cmd.exe',
       args: ['/d', '/c', [file, ...args].map(quoteCmdArg).join(' ')]
@@ -158,7 +224,7 @@ export function buildCommandInvocation(file, args = [], platform = process.platf
   return { file, args };
 }
 
-export function buildReport({ platform = process.platform, toolChecks = [], environmentChecks = [], portChecks = [] }) {
+export function buildReport({ platform = process.platform, toolChecks = [], environmentChecks = [], configChecks = [], portChecks = [] }) {
   const report = {
     generatedAt: new Date().toISOString(),
     platform,
@@ -166,6 +232,7 @@ export function buildReport({ platform = process.platform, toolChecks = [], envi
     sections: [
       { title: '工具链', items: toolChecks },
       { title: '环境变量', items: environmentChecks },
+      { title: '配置检查', items: configChecks },
       { title: '端口占用', items: portChecks.map(portToItem) }
     ]
   };
@@ -208,6 +275,44 @@ export function toTextReport(report) {
   }
 
   return lines.join('\n').trimEnd();
+}
+
+export function createFixPlan(report) {
+  const actions = report.sections
+    .flatMap((section) => section.items)
+    .filter((item) => item.status !== 'pass' && item.suggestion)
+    .map((item) => `${item.title ?? item.id}：${item.suggestion}`);
+
+  if (!actions.length) return '修复计划\n\n暂无必须处理的建议。';
+
+  return [
+    '修复计划',
+    '',
+    ...actions.map((action, index) => `${index + 1}. ${action}`)
+  ].join('\n');
+}
+
+export function maskPrivateText(value, env = process.env) {
+  let text = String(value ?? '');
+  const username = env.USERNAME || env.USER || '';
+  const profile = env.USERPROFILE || '';
+
+  if (profile) text = replaceAllCaseInsensitive(text, profile, '<USERPROFILE>');
+  if (username) text = replaceAllCaseInsensitive(text, username, '<USER>');
+  text = text.replace(/C:\\Users\\[^\\\s;]+/gi, 'C:\\Users\\<USER>');
+  text = text.replace(/\/Users\/[^/\s;]+/g, '/Users/<USER>');
+
+  return text;
+}
+
+export function maskReport(report, env = process.env) {
+  return {
+    ...report,
+    sections: report.sections.map((section) => ({
+      ...section,
+      items: section.items.map((item) => maskReportItem(item, env))
+    }))
+  };
 }
 
 function parseTasklist(output) {
@@ -264,4 +369,32 @@ function quoteCmdArg(value) {
   const text = String(value);
   if (!/[\s"&|<>^]/.test(text)) return text;
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function firstMeaningfulLine(output) {
+  return String(output ?? '').split(/\r?\n/).map((line) => line.trim()).find(Boolean) ?? '';
+}
+
+function findConfigValue(output, keys) {
+  for (const line of String(output ?? '').split(/\r?\n/)) {
+    const match = line.trim().match(/^([^=\s]+)\s*=\s*(.+)$/);
+    if (match && keys.includes(match[1])) return match[2].trim();
+  }
+  return '';
+}
+
+function replaceAllCaseInsensitive(text, search, replacement) {
+  return text.replace(new RegExp(escapeRegExp(search), 'gi'), replacement);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function maskReportItem(item, env) {
+  const masked = { ...item };
+  for (const key of ['detail', 'suggestion', 'processName']) {
+    if (typeof masked[key] === 'string') masked[key] = maskPrivateText(masked[key], env);
+  }
+  return masked;
 }
